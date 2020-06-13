@@ -50,7 +50,7 @@ static void gnssUpdateXtraThrottle(const bool enabled);
 static void setControlCallbacks(LocationControlCallbacks& controlCallbacks);
 static uint32_t enable(LocationTechnologyType techType);
 static void disable(uint32_t id);
-static uint32_t* gnssUpdateConfig(GnssConfig config);
+static uint32_t* gnssUpdateConfig(const GnssConfig& config);
 static uint32_t* gnssGetConfig(GnssConfigFlagsMask mask);
 
 static void gnssUpdateSvTypeConfig(GnssSvTypeConfig& config);
@@ -73,7 +73,7 @@ static void enableNfwLocationAccess(bool enable);
 static void nfwInit(const NfwCbInfo& cbInfo);
 static void getPowerStateChanges(void* powerStateCb);
 
-static void odcpiInit(const OdcpiRequestCallback& callback);
+static void odcpiInit(const OdcpiRequestCallback& callback, OdcpiPrioritytype priority);
 static void odcpiInject(const Location& location);
 
 static void blockCPI(double latitude, double longitude, float accuracy,
@@ -253,7 +253,7 @@ static void disable(uint32_t id)
     }
 }
 
-static uint32_t* gnssUpdateConfig(GnssConfig config)
+static uint32_t* gnssUpdateConfig(const GnssConfig& config)
 {
     if (NULL != gGnssAdapter) {
         return gGnssAdapter->gnssUpdateConfigCommand(config);
@@ -364,10 +364,10 @@ static void updateConnectionStatus(bool connected, int8_t type,
     }
 }
 
-static void odcpiInit(const OdcpiRequestCallback& callback)
+static void odcpiInit(const OdcpiRequestCallback& callback, OdcpiPrioritytype priority)
 {
     if (NULL != gGnssAdapter) {
-        gGnssAdapter->initOdcpiCommand(callback);
+        gGnssAdapter->initOdcpiCommand(callback, priority);
     }
 }
 
