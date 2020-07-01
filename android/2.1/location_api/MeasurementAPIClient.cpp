@@ -87,6 +87,14 @@ MeasurementAPIClient::~MeasurementAPIClient()
     LOC_LOGD("%s]: ()", __FUNCTION__);
 }
 
+void MeasurementAPIClient::clearInterfaces()
+{
+    mGnssMeasurementCbIface = nullptr;
+    mGnssMeasurementCbIface_1_1 = nullptr;
+    mGnssMeasurementCbIface_2_0 = nullptr;
+    mGnssMeasurementCbIface_2_1 = nullptr;
+}
+
 // for GpsInterface
 Return<IGnssMeasurement::GnssMeasurementStatus>
 MeasurementAPIClient::measurementSetCallback(const sp<V1_0::IGnssMeasurementCallback>& callback)
@@ -94,9 +102,7 @@ MeasurementAPIClient::measurementSetCallback(const sp<V1_0::IGnssMeasurementCall
     LOC_LOGD("%s]: (%p)", __FUNCTION__, &callback);
 
     mMutex.lock();
-    mGnssMeasurementCbIface_1_1 = nullptr;
-    mGnssMeasurementCbIface_2_0 = nullptr;
-    mGnssMeasurementCbIface_2_1 = nullptr;
+    clearInterfaces();
     mGnssMeasurementCbIface = callback;
     mMutex.unlock();
 
@@ -112,9 +118,7 @@ MeasurementAPIClient::measurementSetCallback_1_1(
             __FUNCTION__, &callback, (int)powerMode, timeBetweenMeasurement);
 
     mMutex.lock();
-    mGnssMeasurementCbIface = nullptr;
-    mGnssMeasurementCbIface_2_0 = nullptr;
-    mGnssMeasurementCbIface_2_1 = nullptr;
+    clearInterfaces();
     mGnssMeasurementCbIface_1_1 = callback;
     mMutex.unlock();
 
@@ -130,9 +134,7 @@ MeasurementAPIClient::measurementSetCallback_2_0(
         __FUNCTION__, &callback, (int)powerMode, timeBetweenMeasurement);
 
     mMutex.lock();
-    mGnssMeasurementCbIface = nullptr;
-    mGnssMeasurementCbIface_1_1 = nullptr;
-    mGnssMeasurementCbIface_2_1 = nullptr;
+    clearInterfaces();
     mGnssMeasurementCbIface_2_0 = callback;
     mMutex.unlock();
 
@@ -146,9 +148,7 @@ Return<IGnssMeasurement::GnssMeasurementStatus> MeasurementAPIClient::measuremen
         __FUNCTION__, &callback, (int)powerMode, timeBetweenMeasurement);
 
     mMutex.lock();
-    mGnssMeasurementCbIface = nullptr;
-    mGnssMeasurementCbIface_1_1 = nullptr;
-    mGnssMeasurementCbIface_2_0 = nullptr;
+    clearInterfaces();
     mGnssMeasurementCbIface_2_1 = callback;
     mMutex.unlock();
 
@@ -633,7 +633,7 @@ static void convertElapsedRealtimeNanos(GnssMeasurementsNotification& in,
             if (qTimerTickCount >= in.clock.elapsedRealTime) {
                 qtimerDiff = qTimerTickCount - in.clock.elapsedRealTime;
             }
-            LOC_LOGd("sinceBootTimeNanos:%" PRIi64 " in.clock.elapsedRealTime=%" PRIi64 ""
+            LOC_LOGv("sinceBootTimeNanos:%" PRIi64 " in.clock.elapsedRealTime=%" PRIi64 ""
                      " qTimerTickCount=%" PRIi64 " qtimerDiff=%" PRIi64 "",
                      sinceBootTimeNanos, in.clock.elapsedRealTime, qTimerTickCount, qtimerDiff);
             uint64_t qTimerDiffNanos = qTimerTicksToNanos(double(qtimerDiff));
@@ -655,20 +655,25 @@ static void convertElapsedRealtimeNanos(GnssMeasurementsNotification& in,
                         - (int64_t)in.clock.biasNs - (int64_t)in.clock.leapSecond * 1000000000
                         + (int64_t)UTC_TO_GPS_SECONDS * 1000000000;
 
-                LOC_LOGd("sinceBootTimeNanos:%" PRIi64 " currentTimeNanos:%" PRIi64 ""
+                LOC_LOGv("sinceBootTimeNanos:%" PRIi64 " currentTimeNanos:%" PRIi64 ""
                          " measTimeNanos:%" PRIi64 "",
                          sinceBootTimeNanos, currentTimeNanos, measTimeNanos);
                 if (currentTimeNanos >= measTimeNanos) {
                     int64_t ageTimeNanos = currentTimeNanos - measTimeNanos;
-                    LOC_LOGD("%s]: ageTimeNanos:%" PRIi64 ")", __FUNCTION__, ageTimeNanos);
-                    if (ageTimeNanos >= 0 && ageTimeNanos <= sinceBootTimeNanos) {
+                    LOC_LOGv("ageTimeNanos:%" PRIi64 ")", ageTimeNanos);
+                    // the max trusted propagation time 100ms for ageTimeNanos to avoid user
+                    // setting wrong time, it will affect elapsedRealtimeNanos
+                    if (ageTimeNanos <= 100000000) {
                         elapsedRealtime.flags |= V2_0::ElapsedRealtimeFlags::HAS_TIMESTAMP_NS;
                         elapsedRealtime.timestampNs = sinceBootTimeNanos - ageTimeNanos;
                         elapsedRealtime.flags |=
                                 V2_0::ElapsedRealtimeFlags::HAS_TIME_UNCERTAINTY_NS;
                         // time uncertainty is 1 ms since it is calculated from utc time that
                         // is in ms
-                        elapsedRealtime.timeUncertaintyNs = 1000000;
+                        // time uncertainty is the max value between abs(AP_UTC - MP_UTC) and 100ms,
+                        // to verify if user change the sys time
+                        elapsedRealtime.timeUncertaintyNs =
+                                std::max(ageTimeNanos, (int64_t)100000000);
                     }
                 }
             } else {
@@ -676,7 +681,7 @@ static void convertElapsedRealtimeNanos(GnssMeasurementsNotification& in,
             }
         }
     }
-    LOC_LOGd("elapsedRealtime.timestampNs=%" PRIi64 ""
+    LOC_LOGv("elapsedRealtime.timestampNs=%" PRIi64 ""
              " elapsedRealtime.timeUncertaintyNs=%" PRIi64 " elapsedRealtime.flags=0x%X",
              elapsedRealtime.timestampNs,
              elapsedRealtime.timeUncertaintyNs, elapsedRealtime.flags);
