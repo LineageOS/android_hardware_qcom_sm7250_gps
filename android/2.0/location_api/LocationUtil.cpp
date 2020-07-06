@@ -137,7 +137,7 @@ void convertGnssLocation(Location& in, V2_0::GnssLocation& out)
             if (qTimerTickCount >= in.elapsedRealTime) {
                 qtimerDiff = qTimerTickCount - in.elapsedRealTime;
             }
-            LOC_LOGd("sinceBootTimeNanos:%" PRIi64 " in.elapsedRealTime=%" PRIi64 ""
+            LOC_LOGv("sinceBootTimeNanos:%" PRIi64 " in.elapsedRealTime=%" PRIi64 ""
                      " qTimerTickCount=%" PRIi64 " qtimerDiff=%" PRIi64 "",
                      sinceBootTimeNanos, in.elapsedRealTime, qTimerTickCount, qtimerDiff);
             uint64_t qTimerDiffNanos = qTimerTicksToNanos(double(qtimerDiff));
@@ -150,28 +150,27 @@ void convertGnssLocation(Location& in, V2_0::GnssLocation& out)
         } else {
             int64_t currentTimeNanos = currentTime.tv_sec*1000000000 + currentTime.tv_nsec;
             int64_t locationTimeNanos = in.timestamp*1000000;
-            LOC_LOGD("%s]: sinceBootTimeNanos:%" PRIi64 " currentTimeNanos:%" PRIi64 ""
+            LOC_LOGv("sinceBootTimeNanos:%" PRIi64 " currentTimeNanos:%" PRIi64 ""
                      " locationTimeNanos:%" PRIi64 "",
-                    __FUNCTION__, sinceBootTimeNanos, currentTimeNanos, locationTimeNanos);
+                     sinceBootTimeNanos, currentTimeNanos, locationTimeNanos);
             if (currentTimeNanos >= locationTimeNanos) {
                 int64_t ageTimeNanos = currentTimeNanos - locationTimeNanos;
-                LOC_LOGD("%s]: ageTimeNanos:%" PRIi64 ")", __FUNCTION__, ageTimeNanos);
-                // the max trusted propagation time 30s for ageTimeNanos to avoid user setting
+                LOC_LOGv("ageTimeNanos:%" PRIi64 ")", ageTimeNanos);
+                // the max trusted propagation time 100ms for ageTimeNanos to avoid user setting
                 // wrong time, it will affect elapsedRealtimeNanos
-                if (ageTimeNanos >= 0 && ageTimeNanos <= 30000000000) {
+                if (ageTimeNanos <= 100000000) {
                     out.elapsedRealtime.flags |= ElapsedRealtimeFlags::HAS_TIMESTAMP_NS;
                     out.elapsedRealtime.timestampNs = sinceBootTimeNanos - ageTimeNanos;
                     out.elapsedRealtime.flags |= ElapsedRealtimeFlags::HAS_TIME_UNCERTAINTY_NS;
                     // time uncertainty is the max value between abs(AP_UTC - MP_UTC) and 100ms, to
                     // verify if user change the sys time
                     out.elapsedRealtime.timeUncertaintyNs =
-                            std::max((int64_t)abs(currentTimeNanos - locationTimeNanos),
-                                     (int64_t)100000000);
+                            std::max(ageTimeNanos, (int64_t)100000000);
                 }
             }
         }
     }
-    LOC_LOGd("out.elapsedRealtime.timestampNs=%" PRIi64 ""
+    LOC_LOGv("out.elapsedRealtime.timestampNs=%" PRIi64 ""
              " out.elapsedRealtime.timeUncertaintyNs=%" PRIi64 ""
              " out.elapsedRealtime.flags=0x%X",
              out.elapsedRealtime.timestampNs,
