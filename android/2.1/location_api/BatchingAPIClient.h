@@ -53,7 +53,6 @@ public:
     BatchingAPIClient(const sp<V2_0::IGnssBatchingCallback>& callback);
     void gnssUpdateCallbacks(const sp<V1_0::IGnssBatchingCallback>& callback);
     void gnssUpdateCallbacks_2_0(const sp<V2_0::IGnssBatchingCallback>& callback);
-    ~BatchingAPIClient();
     int getBatchSize();
     int startSession(const V1_0::IGnssBatching::Options& options);
     int updateSessionOptions(const V1_0::IGnssBatching::Options& options);
@@ -68,6 +67,8 @@ public:
     void onBatchingCb(size_t count, Location* location, BatchingOptions batchOptions) final;
 
 private:
+    ~BatchingAPIClient();
+
     void setCallbacks();
     std::mutex mMutex;
     sp<V1_0::IGnssBatchingCallback> mGnssBatchingCbIface;
