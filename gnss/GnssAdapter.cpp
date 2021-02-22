@@ -6229,7 +6229,8 @@ GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallbac
         }
         gnssAntennaInformations.push_back(std::move(gnssAntennaInfo));
     }
-    antennaInfoCallback(gnssAntennaInformations);
+    if (antennaInfoVectorSize > 0)
+        antennaInfoCallback(gnssAntennaInformations);
 }
 
 /* ==== DGnss Usable Reporter ========================================================= */
