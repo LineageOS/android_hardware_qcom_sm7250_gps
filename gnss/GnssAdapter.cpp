@@ -6109,6 +6109,9 @@ GnssAdapter::parseDoublesString(char* dString) {
 void
 GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallback)
 {
+#define MAX_TEXT_WIDTH      50
+#define MAX_COLUMN_WIDTH    20
+
     /* parse antenna_corrections file and fill in
     a vector of GnssAntennaInformation data structure */
 
@@ -6127,6 +6130,8 @@ GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallbac
         char pcOffsetStr[LOC_MAX_PARAM_STRING];
         uint32_t numberOfRows = 0;
         uint32_t numberOfColumns = 0;
+        uint32_t numberOfRowsSGC = 0;
+        uint32_t numberOfColumnsSGC = 0;
 
         gnssAntennaInfo.phaseCenterVariationCorrectionMillimeters.clear();
         gnssAntennaInfo.phaseCenterVariationCorrectionUncertaintyMillimeters.clear();
@@ -6140,6 +6145,10 @@ GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallbac
         s3 += to_string(i);
         string s4 = "NUMBER_OF_COLUMNS_";
         s4 += to_string(i);
+        string s5 = "NUMBER_OF_ROWS_SGC_";
+        s5 += to_string(i);
+        string s6 = "NUMBER_OF_COLUMNS_SGC_";
+        s6 += to_string(i);
 
         gnssAntennaInfo.size = sizeof(gnssAntennaInfo);
         loc_param_s_type ant_cf_table[] =
@@ -6148,8 +6157,17 @@ GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallbac
             { s2.c_str(), &pcOffsetStr, NULL, 's' },
             { s3.c_str(), &numberOfRows, NULL, 'n' },
             { s4.c_str(), &numberOfColumns, NULL, 'n' },
+            { s5.c_str(), &numberOfRowsSGC, NULL, 'n' },
+            { s6.c_str(), &numberOfColumnsSGC, NULL, 'n' },
         };
         UTIL_READ_CONF(LOC_PATH_ANT_CORR, ant_cf_table);
+
+        if (0 == numberOfRowsSGC) {
+            numberOfRowsSGC = numberOfRows;
+        }
+        if (0 == numberOfColumnsSGC) {
+            numberOfColumnsSGC = numberOfColumns;
+        }
 
         gnssAntennaInfo.carrierFrequencyMHz = carrierFrequencyMHz;
 
@@ -6165,16 +6183,33 @@ GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallbac
         gnssAntennaInfo.phaseCenterOffsetCoordinateMillimeters.z = pcOffset[4];
         gnssAntennaInfo.phaseCenterOffsetCoordinateMillimeters.zUncertainty = pcOffset[5];
 
+        uint16_t array_size = MAX_TEXT_WIDTH + MAX_COLUMN_WIDTH*numberOfColumns;
+        uint16_t array_size_SGC = MAX_TEXT_WIDTH + MAX_COLUMN_WIDTH*numberOfColumnsSGC;
         for (uint32_t j = 0; j < numberOfRows; j++) {
-            char pcVarCorrStr[LOC_MAX_PARAM_STRING];
-            char pcVarCorrUncStr[LOC_MAX_PARAM_STRING];
-            char sigGainCorrStr[LOC_MAX_PARAM_STRING];
-            char sigGainCorrUncStr[LOC_MAX_PARAM_STRING];
+            char pcVarCorrStr[array_size];
+            char pcVarCorrUncStr[array_size];
 
             string s1 = "PC_VARIATION_CORRECTION_" + to_string(i) + "_ROW_";
             s1 += to_string(j);
             string s2 = "PC_VARIATION_CORRECTION_UNC_" + to_string(i) + "_ROW_";
             s2 += to_string(j);
+
+            loc_param_s_type ant_row_table[] =
+            {
+                { s1.c_str(), &pcVarCorrStr, NULL, 's' },
+                { s2.c_str(), &pcVarCorrUncStr, NULL, 's' },
+            };
+            UTIL_READ_CONF_LONG(LOC_PATH_ANT_CORR, ant_row_table, array_size);
+
+            gnssAntennaInfo.phaseCenterVariationCorrectionMillimeters.push_back(
+                    parseDoublesString(pcVarCorrStr));
+            gnssAntennaInfo.phaseCenterVariationCorrectionUncertaintyMillimeters.push_back(
+                    parseDoublesString(pcVarCorrUncStr));
+        }
+        for (uint32_t j = 0; j < numberOfRowsSGC; j++) {
+            char sigGainCorrStr[array_size_SGC];
+            char sigGainCorrUncStr[array_size_SGC];
+
             string s3 = "SIGNAL_GAIN_CORRECTION_" + to_string(i) + "_ROW_";
             s3 += to_string(j);
             string s4 = "SIGNAL_GAIN_CORRECTION_UNC_" + to_string(i) + "_ROW_";
@@ -6182,17 +6217,11 @@ GnssAdapter::reportGnssAntennaInformation(const antennaInfoCb antennaInfoCallbac
 
             loc_param_s_type ant_row_table[] =
             {
-                { s1.c_str(), &pcVarCorrStr, NULL, 's' },
-                { s2.c_str(), &pcVarCorrUncStr, NULL, 's' },
                 { s3.c_str(), &sigGainCorrStr, NULL, 's' },
                 { s4.c_str(), &sigGainCorrUncStr, NULL, 's' },
             };
-            UTIL_READ_CONF(LOC_PATH_ANT_CORR, ant_row_table);
+            UTIL_READ_CONF_LONG(LOC_PATH_ANT_CORR, ant_row_table, array_size_SGC);
 
-            gnssAntennaInfo.phaseCenterVariationCorrectionMillimeters.push_back(
-                    parseDoublesString(pcVarCorrStr));
-            gnssAntennaInfo.phaseCenterVariationCorrectionUncertaintyMillimeters.push_back(
-                    parseDoublesString(pcVarCorrUncStr));
             gnssAntennaInfo.signalGainCorrectionDbi.push_back(
                     parseDoublesString(sigGainCorrStr));
             gnssAntennaInfo.signalGainCorrectionUncertaintyDbi.push_back(
