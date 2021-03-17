@@ -160,7 +160,7 @@ LocApiBase::LocApiBase(LOC_API_ADAPTER_EVENT_MASK_T excludedMask,
 
     android_atomic_inc(&mMsgTaskRefCount);
     if (nullptr == mMsgTask) {
-        mMsgTask = new MsgTask("LocApiMsgTask", false);
+        mMsgTask = new MsgTask("LocApiMsgTask");
     }
 }
 
@@ -619,7 +619,8 @@ void LocApiBase::
 DEFAULT_IMPL()
 
 void LocApiBase::
-    injectPosition(double /*latitude*/, double /*longitude*/, float /*accuracy*/)
+    injectPosition(double /*latitude*/, double /*longitude*/, float /*accuracy*/,
+                   bool /*onDemandCpi*/)
 DEFAULT_IMPL()
 
 void LocApiBase::
@@ -633,10 +634,6 @@ DEFAULT_IMPL()
 void LocApiBase::
     setTime(LocGpsUtcTime /*time*/, int64_t /*timeReference*/, int /*uncertainty*/)
 DEFAULT_IMPL()
-
-enum loc_api_adapter_err LocApiBase::
-    setXtraData(char* /*data*/, int /*length*/)
-DEFAULT_IMPL(LOC_API_ADAPTER_ERR_SUCCESS)
 
 void LocApiBase::
    atlOpenStatus(int /*handle*/, int /*is_succ*/, char* /*apn*/, uint32_t /*apnLen*/,
@@ -669,7 +666,7 @@ enum loc_api_adapter_err LocApiBase::
 DEFAULT_IMPL(LOC_API_ADAPTER_ERR_SUCCESS)
 
 LocationError LocApiBase::
-    setLPPConfigSync(GnssConfigLppProfile /*profile*/)
+    setLPPConfigSync(GnssConfigLppProfileMask /*profileMask*/)
 DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
 
 
@@ -714,9 +711,6 @@ DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
 GnssConfigSuplVersion LocApiBase::convertSuplVersion(const uint32_t /*suplVersion*/)
 DEFAULT_IMPL(GNSS_CONFIG_SUPL_VERSION_1_0_0)
 
-GnssConfigLppProfile LocApiBase::convertLppProfile(const uint32_t /*lppProfile*/)
-DEFAULT_IMPL(GNSS_CONFIG_LPP_PROFILE_RRLP_ON_LTE)
-
 GnssConfigLppeControlPlaneMask LocApiBase::convertLppeCp(const uint32_t /*lppeControlPlaneMask*/)
 DEFAULT_IMPL(0)
 
@@ -727,9 +721,9 @@ LocationError LocApiBase::setEmergencyExtensionWindowSync(
         const uint32_t /*emergencyExtensionSeconds*/)
 DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
 
-LocationError LocApiBase::setMeasurementCorrections(
-        const GnssMeasurementCorrections /*gnssMeasurementCorrections*/)
-DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
+void LocApiBase::setMeasurementCorrections(
+        const GnssMeasurementCorrections& /*gnssMeasurementCorrections*/)
+DEFAULT_IMPL()
 
 void LocApiBase::
    getWwanZppFix()
@@ -747,12 +741,6 @@ void LocApiBase::
     requestForAidingData(GnssAidingDataSvMask /*svDataMask*/)
 DEFAULT_IMPL()
 
-void LocApiBase::
-    installAGpsCert(const LocDerEncodedCertificate* /*pData*/,
-                    size_t /*length*/,
-                    uint32_t /*slotBitMask*/)
-DEFAULT_IMPL()
-
 LocationError LocApiBase::
     setXtraVersionCheckSync(uint32_t /*check*/)
 DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
@@ -760,7 +748,8 @@ DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
 LocationError LocApiBase::setBlacklistSvSync(const GnssSvIdConfig& /*config*/)
 DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
 
-void LocApiBase::setBlacklistSv(const GnssSvIdConfig& /*config*/)
+void LocApiBase::setBlacklistSv(const GnssSvIdConfig& /*config*/,
+                                LocApiResponse* /*adapterResponse*/)
 DEFAULT_IMPL()
 
 void LocApiBase::getBlacklistSv()
@@ -788,8 +777,8 @@ void LocApiBase::
                                           LocApiResponse* /*adapterResponse*/)
 DEFAULT_IMPL()
 
-LocationError LocApiBase::getGnssEnergyConsumed()
-DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
+void LocApiBase::getGnssEnergyConsumed()
+DEFAULT_IMPL()
 
 
 void LocApiBase::addGeofence(uint32_t /*clientId*/, const GeofenceOption& /*options*/,
@@ -908,4 +897,20 @@ void LocApiBase::
     getMinGpsWeek(uint32_t sessionId, LocApiResponse* /*adapterResponse*/)
 DEFAULT_IMPL()
 
+LocationError LocApiBase::
+    setParameterSync(const GnssConfig& gnssConfig)
+DEFAULT_IMPL(LOCATION_ERROR_SUCCESS)
+
+void LocApiBase::
+    getParameter(uint32_t sessionId, GnssConfigFlagsMask flags, LocApiResponse* /*adapterResponse*/)
+DEFAULT_IMPL()
+
+void LocApiBase::
+    configConstellationMultiBand(const GnssSvTypeConfig& secondaryBandConfig,
+                                 LocApiResponse* /*adapterResponse*/)
+DEFAULT_IMPL()
+
+void LocApiBase::
+    getConstellationMultiBandConfig(uint32_t sessionId, LocApiResponse* /*adapterResponse*/)
+DEFAULT_IMPL()
 } // namespace loc_core
