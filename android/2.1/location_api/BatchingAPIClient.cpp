@@ -202,7 +202,7 @@ void BatchingAPIClient::flushBatchedLocations() {
 
 void BatchingAPIClient::onCapabilitiesCb(LocationCapabilitiesMask capabilitiesMask)
 {
-    LOC_LOGD("%s]: (%02x)", __FUNCTION__, capabilitiesMask);
+    LOC_LOGD("%s]: (%" PRIu64 ")", __FUNCTION__, capabilitiesMask);
     mLocationCapabilitiesMask = capabilitiesMask;
 }
 
