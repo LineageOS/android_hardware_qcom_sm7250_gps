@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, 2016-2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, 2016-2021 The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -484,6 +484,14 @@ void LocApiBase::reportLocationSystemInfo(const LocationSystemInfo& locationSyst
     TO_ALL_LOCADAPTERS(mLocAdapters[i]->reportLocationSystemInfoEvent(locationSystemInfo));
 }
 
+void LocApiBase::reportQwesCapabilities
+(
+    const std::unordered_map<LocationQwesFeatureType, bool> &featureMap
+)
+{
+    // loop through adapters, and deliver to all adapters.
+    TO_ALL_LOCADAPTERS(mLocAdapters[i]->reportQwesCapabilities(featureMap));
+}
 void LocApiBase::requestXtraData()
 {
     // loop through adapters, and deliver to the first handling adapter.
@@ -599,6 +607,12 @@ void LocApiBase::reportGnssConfig(uint32_t sessionId, const GnssConfig& gnssConf
 {
     // loop through adapters, and deliver to the first handling adapter.
     TO_ALL_LOCADAPTERS(mLocAdapters[i]->reportGnssConfigEvent(sessionId, gnssConfig));
+}
+
+void LocApiBase::reportLatencyInfo(GnssLatencyInfo& gnssLatencyInfo)
+{
+    // loop through adapters, and deliver to the first handling adapter.
+    TO_ALL_LOCADAPTERS(mLocAdapters[i]->reportLatencyInfoEvent(gnssLatencyInfo));
 }
 
 enum loc_api_adapter_err LocApiBase::
@@ -942,7 +956,7 @@ int64_t ElapsedRealtimeEstimator::getElapsedRealtimeEstimateNanos(int64_t curDat
             if (tbf > 0 && tbf != curDataTimeNanos - mPrevDataTimeNanos) {
                 mFixTimeStablizationThreshold = 5;
             }
-            int64_t currentTimeNanos = currentTime.tv_sec*1000000000 + currentTime.tv_nsec;
+            int64_t currentTimeNanos = (int64_t)currentTime.tv_sec*1000000000 + currentTime.tv_nsec;
             LOC_LOGd("sinceBootTimeNanos:%" PRIi64 " currentTimeNanos:%" PRIi64 ""
                      " locationTimeNanos:%" PRIi64 "",
                      sinceBootTimeNanos, currentTimeNanos, curDataTimeNanos);
@@ -1034,9 +1048,9 @@ bool ElapsedRealtimeEstimator::getCurrentTime(
         if (clock_gettime(CLOCK_BOOTTIME, &sinceBootTimeTest) != 0) {
             break;
         };
-        sinceBootTimeNanos = sinceBootTime.tv_sec * 1000000000 + sinceBootTime.tv_nsec;
+        sinceBootTimeNanos = (int64_t)sinceBootTime.tv_sec * 1000000000 + sinceBootTime.tv_nsec;
         int64_t sinceBootTimeTestNanos =
-            sinceBootTimeTest.tv_sec * 1000000000 + sinceBootTimeTest.tv_nsec;
+            (int64_t)sinceBootTimeTest.tv_sec * 1000000000 + sinceBootTimeTest.tv_nsec;
         int64_t sinceBootTimeDeltaNanos = sinceBootTimeTestNanos - sinceBootTimeNanos;
 
         /* sinceBootTime and sinceBootTimeTest should have a close value if there was no
