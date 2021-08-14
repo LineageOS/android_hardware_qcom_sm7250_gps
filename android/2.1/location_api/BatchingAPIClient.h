@@ -43,6 +43,9 @@ namespace gnss {
 namespace V2_1 {
 namespace implementation {
 
+
+enum BATCHING_STATE { STARTED, STOPPING, STOPPED };
+
 class BatchingAPIClient : public LocationAPIClientBase
 {
 public:
@@ -50,7 +53,6 @@ public:
     BatchingAPIClient(const sp<V2_0::IGnssBatchingCallback>& callback);
     void gnssUpdateCallbacks(const sp<V1_0::IGnssBatchingCallback>& callback);
     void gnssUpdateCallbacks_2_0(const sp<V2_0::IGnssBatchingCallback>& callback);
-    ~BatchingAPIClient();
     int getBatchSize();
     int startSession(const V1_0::IGnssBatching::Options& options);
     int updateSessionOptions(const V1_0::IGnssBatching::Options& options);
@@ -65,12 +67,17 @@ public:
     void onBatchingCb(size_t count, Location* location, BatchingOptions batchOptions) final;
 
 private:
+    ~BatchingAPIClient();
+
     void setCallbacks();
     std::mutex mMutex;
     sp<V1_0::IGnssBatchingCallback> mGnssBatchingCbIface;
     uint32_t mDefaultId;
     LocationCapabilitiesMask mLocationCapabilitiesMask;
     sp<V2_0::IGnssBatchingCallback> mGnssBatchingCbIface_2_0;
+    volatile BATCHING_STATE mState = STOPPED;
+
+    std::vector<Location> mBatchedLocationInCache;
 };
 
 }  // namespace implementation
