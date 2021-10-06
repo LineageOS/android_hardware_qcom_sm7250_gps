@@ -115,6 +115,9 @@ typedef uint32_t LocPosTechMask;
 #define LOC_POS_TECH_MASK_AFLT ((LocPosTechMask)0x00000040)
 #define LOC_POS_TECH_MASK_HYBRID ((LocPosTechMask)0x00000080)
 #define LOC_POS_TECH_MASK_PPE ((LocPosTechMask)0x00000100)
+#define LOC_POS_TECH_MASK_VEH ((LocPosTechMask)0x00000200)
+#define LOC_POS_TECH_MASK_VIS ((LocPosTechMask)0x00000400)
+
 
 enum loc_registration_mask_status {
     LOC_REGISTRATION_MASK_ENABLED,
@@ -134,7 +137,9 @@ typedef enum {
     LOC_SUPPORTED_FEATURE_FDCL_2, /**< Support FDCL V2 */
     LOC_SUPPORTED_FEATURE_LOCATION_PRIVACY, /**< Support location privacy */
     LOC_SUPPORTED_FEATURE_NAVIC, /**< Support NAVIC constellation */
-    LOC_SUPPORTED_FEATURE_MEASUREMENTS_CORRECTION /**< Support measurements correction */
+    LOC_SUPPORTED_FEATURE_MEASUREMENTS_CORRECTION, /**< Support measurements correction */
+    LOC_SUPPORTED_FEATURE_ROBUST_LOCATION, /**<  Support Robust Location feature */
+    LOC_SUPPORTED_FEATURE_EDGNSS /**< Support precise location dgnss */
 } loc_supported_feature_enum;
 
 typedef struct {
@@ -405,11 +410,17 @@ typedef uint64_t GpsLocationExtendedFlags;
 #define GPS_LOCATION_EXTENDED_HAS_DGNSS_DATA_AGE               0x80000000000
  /** GpsLocationExtended has the conformityIndex computed from
   *  robust location feature. */
-#define GPS_LOCATION_EXTENDED_HAS_CONFORMITY_INDEX             0x100000000000
+#define GPS_LOCATION_EXTENDED_HAS_CONFORMITY_INDEX            0x100000000000
  /** GpsLocationExtended has the llaVRPased. */
 #define GPS_LOCATION_EXTENDED_HAS_LLA_VRP_BASED                0x200000000000
 /** GpsLocationExtended has the velocityVRPased. */
 #define GPS_LOCATION_EXTENDED_HAS_ENU_VELOCITY_LLA_VRP_BASED   0x400000000000
+/** GpsLocationExtended has upperTriangleFullCovMatrix. */
+#define GPS_LOCATION_EXTENDED_HAS_UPPER_TRIANGLE_FULL_COV_MATRIX 0x800000000000
+/** GpsLocationExtended has drSolutionStatusMask. */
+#define GPS_LOCATION_EXTENDED_HAS_DR_SOLUTION_STATUS_MASK        0x1000000000000
+/** GpsLocationExtended has altitudeAssumed. */
+#define GPS_LOCATION_EXTENDED_HAS_ALTITUDE_ASSUMED               0x2000000000000
 
 typedef uint32_t LocNavSolutionMask;
 /* Bitmask to specify whether SBAS ionospheric correction is used  */
@@ -428,6 +439,8 @@ typedef uint32_t LocNavSolutionMask;
 #define LOC_NAV_MASK_PPP_CORRECTION ((LocNavSolutionMask)0x0040)
 /**<  Bitmask to specify whether Position Report is RTK fixed corrected   */
 #define LOC_NAV_MASK_RTK_FIXED_CORRECTION ((LocNavSolutionMask)0x0080)
+/**<  Bitmask specifying whether only SBAS corrected SVs are used for the fix */
+#define LOC_NAV_MASK_ONLY_SBAS_CORRECTED_SV_USED ((LocNavSolutionMask)0x0100)
 
 typedef uint32_t LocPosDataMask;
 /* Bitmask to specify whether Navigation data has Forward Acceleration  */
@@ -473,6 +486,7 @@ typedef uint32_t GnssAdditionalSystemInfoMask;
 #define GAL_SV_PRN_MAX      336
 #define NAVIC_SV_PRN_MIN    401
 #define NAVIC_SV_PRN_MAX    414
+#define GLO_SV_PRN_SLOT_UNKNOWN 255
 
 /* Checking svIdOneBase can be set to the corresponding bit in mask */
 #define svFitsMask(mask, svIdOneBase)                 \
@@ -480,6 +494,9 @@ typedef uint32_t GnssAdditionalSystemInfoMask;
 /* Setting svIdOneBase specific bit in the mask if the bit offset fits */
 #define setSvMask(mask, svIdOneBase)                  \
     if (svFitsMask(mask, svIdOneBase)) mask |= (1ULL << ((svIdOneBase) - 1))
+
+#define isValInRangeInclusive(val, min, max) ((val) >= (min) && (val) <= (max))
+#define isGloSlotUnknown(val) ((val) == GLO_SV_PRN_SLOT_UNKNOWN)
 
 typedef enum {
     LOC_RELIABILITY_NOT_SET = 0,
@@ -689,7 +706,7 @@ typedef struct {
     float carrierPhasAmbiguity;
 } GpsMeasUsageInfo;
 
-
+#define COV_MATRIX_SIZE 12
 /** Represents gps location extended. */
 typedef struct {
     /** set to sizeof(GpsLocationExtended) */
@@ -834,13 +851,35 @@ typedef struct {
     LLAInfo llaVRPBased;
     /** VRR-based east, north, and up velocity */
     float enuVelocityVRPBased[3];
-} GpsLocationExtended;
+    /** Upper triangle elements of full matrix of position and
+        velocity estimate in ECEF
 
-enum loc_sess_status {
-    LOC_SESS_SUCCESS,
-    LOC_SESS_INTERMEDIATE,
-    LOC_SESS_FAILURE
-};
+         The full covariance matrix of PPE position
+         (x, y, z in ECEF, in the unit of meters) estimate is a 3x3 matrix
+            | px,x  px,y  px,z |
+            | py,x  py,y  py,z |
+            | pz,x  pz,y  pz,z |
+
+         The full covariance matrix of PPE velocity
+         (vx,vy, vz in ECEF, in the unit of m/s) estimate is a 3x3 matrix
+            | pvx,vx  pvx,vy  pvx,vz |
+            | pvy,vx  pvy,vy  pvy,vz |
+            | pvz,vx  pvz,vy  pvz,vz |
+
+        upperTriangleFullCovMatrix =
+          { px,x, px,y, px,z, py,y, py,z, pz,z, pvx,vx, pvx,vy, pvx,vz, pvy,vy, pvy,vz, pvz,vz}
+        Uint: px,x, px,y, px,z, py,y, py,z, pz,z is in meter
+              pvx,vx, pvx,vy, pvx,vz, pvy,vy, pvy,vz, pvz,vz is in meters/seconds
+    */
+    float upperTriangleFullCovMatrix[COV_MATRIX_SIZE];
+    DrSolutionStatusMask drSolutionStatusMask;
+    /** When this field is valid, it will indicates whether altitude
+     *  is assumed or calculated.
+     *  false: Altitude is calculated.
+     *  true:  Altitude is assumed; there may not be enough
+     *         satellites to determine the precise altitude. */
+    bool altitudeAssumed;
+} GpsLocationExtended;
 
 // struct that contains complete position info from engine
 typedef struct {
@@ -882,6 +921,7 @@ typedef uint32_t NmeaSentenceTypesMask;
 #define LOC_NMEA_MASK_GQGSV_V02 ((NmeaSentenceTypesMask)0x10000000) /**<  Enable GQGSV type  */
 #define LOC_NMEA_MASK_GIGSV_V02 ((NmeaSentenceTypesMask)0x20000000) /**<  Enable GIGSV type  */
 #define LOC_NMEA_MASK_GNDTM_V02 ((NmeaSentenceTypesMask)0x40000000) /**<  Enable GNDTM type  */
+#define LOC_NMEA_MASK_TAGBLOCK_V02 ((NmeaSentenceTypesMask)0x80000000) /**< Enable TAGBLOCK type */
 
 
 // all bitmasks of general supported NMEA sentenses - debug is not part of this
@@ -976,6 +1016,7 @@ enum loc_api_adapter_event_index {
     LOC_API_ADAPTER_LOC_SYSTEM_INFO,                   // Location system info event
     LOC_API_ADAPTER_GNSS_NHZ_MEASUREMENT_REPORT,       // GNSS SV nHz measurement report
     LOC_API_ADAPTER_EVENT_REPORT_INFO,                 // Event report info
+    LOC_API_ADAPTER_LATENCY_INFORMATION_REPORT,       // Latency information report
     LOC_API_ADAPTER_EVENT_MAX
 };
 
@@ -1018,6 +1059,7 @@ enum loc_api_adapter_event_index {
 #define LOC_API_ADAPTER_BIT_LOC_SYSTEM_INFO                  (1ULL<<LOC_API_ADAPTER_LOC_SYSTEM_INFO)
 #define LOC_API_ADAPTER_BIT_GNSS_NHZ_MEASUREMENT             (1ULL<<LOC_API_ADAPTER_GNSS_NHZ_MEASUREMENT_REPORT)
 #define LOC_API_ADAPTER_BIT_EVENT_REPORT_INFO                (1ULL<<LOC_API_ADAPTER_EVENT_REPORT_INFO)
+#define LOC_API_ADAPTER_BIT_LATENCY_INFORMATION              (1ULL<<LOC_API_ADAPTER_LATENCY_INFORMATION_REPORT)
 
 typedef uint64_t LOC_API_ADAPTER_EVENT_MASK_T;
 
@@ -1477,37 +1519,42 @@ typedef struct
 
 
 typedef uint64_t GpsSvMeasHeaderFlags;
-#define GNSS_SV_MEAS_HEADER_HAS_LEAP_SECOND                  0x00000001
-#define GNSS_SV_MEAS_HEADER_HAS_CLOCK_FREQ                   0x00000002
-#define GNSS_SV_MEAS_HEADER_HAS_AP_TIMESTAMP                 0x00000004
-#define GNSS_SV_MEAS_HEADER_HAS_GPS_GLO_INTER_SYSTEM_BIAS    0x00000008
-#define GNSS_SV_MEAS_HEADER_HAS_GPS_BDS_INTER_SYSTEM_BIAS    0x00000010
-#define GNSS_SV_MEAS_HEADER_HAS_GPS_GAL_INTER_SYSTEM_BIAS    0x00000020
-#define GNSS_SV_MEAS_HEADER_HAS_BDS_GLO_INTER_SYSTEM_BIAS    0x00000040
-#define GNSS_SV_MEAS_HEADER_HAS_GAL_GLO_INTER_SYSTEM_BIAS    0x00000080
-#define GNSS_SV_MEAS_HEADER_HAS_GAL_BDS_INTER_SYSTEM_BIAS    0x00000100
-#define GNSS_SV_MEAS_HEADER_HAS_GPS_SYSTEM_TIME              0x00000200
-#define GNSS_SV_MEAS_HEADER_HAS_GAL_SYSTEM_TIME              0x00000400
-#define GNSS_SV_MEAS_HEADER_HAS_BDS_SYSTEM_TIME              0x00000800
-#define GNSS_SV_MEAS_HEADER_HAS_QZSS_SYSTEM_TIME             0x00001000
-#define GNSS_SV_MEAS_HEADER_HAS_GLO_SYSTEM_TIME              0x00002000
-#define GNSS_SV_MEAS_HEADER_HAS_GPS_SYSTEM_TIME_EXT          0x00004000
-#define GNSS_SV_MEAS_HEADER_HAS_GAL_SYSTEM_TIME_EXT          0x00008000
-#define GNSS_SV_MEAS_HEADER_HAS_BDS_SYSTEM_TIME_EXT          0x00010000
-#define GNSS_SV_MEAS_HEADER_HAS_QZSS_SYSTEM_TIME_EXT         0x00020000
-#define GNSS_SV_MEAS_HEADER_HAS_GLO_SYSTEM_TIME_EXT          0x00040000
-#define GNSS_SV_MEAS_HEADER_HAS_GPSL1L5_TIME_BIAS            0x00080000
-#define GNSS_SV_MEAS_HEADER_HAS_GALE1E5A_TIME_BIAS           0x00100000
-#define GNSS_SV_MEAS_HEADER_HAS_GPS_NAVIC_INTER_SYSTEM_BIAS  0x00200000
-#define GNSS_SV_MEAS_HEADER_HAS_GAL_NAVIC_INTER_SYSTEM_BIAS  0x00400000
-#define GNSS_SV_MEAS_HEADER_HAS_GLO_NAVIC_INTER_SYSTEM_BIAS  0x00800000
-#define GNSS_SV_MEAS_HEADER_HAS_BDS_NAVIC_INTER_SYSTEM_BIAS  0x01000000
-#define GNSS_SV_MEAS_HEADER_HAS_NAVIC_SYSTEM_TIME            0x02000000
-#define GNSS_SV_MEAS_HEADER_HAS_NAVIC_SYSTEM_TIME_EXT        0x04000000
-#define GNSS_SV_MEAS_HEADER_HAS_DGNSS_CORRECTION_SOURCE_TYPE  0x08000000
-#define GNSS_SV_MEAS_HEADER_HAS_DGNSS_CORRECTION_SOURCE_ID    0x010000000
-#define GNSS_SV_MEAS_HEADER_HAS_DGNSS_REF_STATION_ID          0x020000000
-#define GNSS_SV_MEAS_HEADER_HAS_REF_COUNT_TICKS              0x040000000
+#define GNSS_SV_MEAS_HEADER_HAS_LEAP_SECOND                   0x000000001
+#define GNSS_SV_MEAS_HEADER_HAS_CLOCK_FREQ                    0x000000002
+#define GNSS_SV_MEAS_HEADER_HAS_AP_TIMESTAMP                  0x000000004
+#define GNSS_SV_MEAS_HEADER_HAS_GPS_GLO_INTER_SYSTEM_BIAS     0x000000008
+#define GNSS_SV_MEAS_HEADER_HAS_GPS_BDS_INTER_SYSTEM_BIAS     0x000000010
+#define GNSS_SV_MEAS_HEADER_HAS_GPS_GAL_INTER_SYSTEM_BIAS     0x000000020
+#define GNSS_SV_MEAS_HEADER_HAS_BDS_GLO_INTER_SYSTEM_BIAS     0x000000040
+#define GNSS_SV_MEAS_HEADER_HAS_GAL_GLO_INTER_SYSTEM_BIAS     0x000000080
+#define GNSS_SV_MEAS_HEADER_HAS_GAL_BDS_INTER_SYSTEM_BIAS     0x000000100
+#define GNSS_SV_MEAS_HEADER_HAS_GPS_SYSTEM_TIME               0x000000200
+#define GNSS_SV_MEAS_HEADER_HAS_GAL_SYSTEM_TIME               0x000000400
+#define GNSS_SV_MEAS_HEADER_HAS_BDS_SYSTEM_TIME               0x000000800
+#define GNSS_SV_MEAS_HEADER_HAS_QZSS_SYSTEM_TIME              0x000001000
+#define GNSS_SV_MEAS_HEADER_HAS_GLO_SYSTEM_TIME               0x000002000
+#define GNSS_SV_MEAS_HEADER_HAS_GPS_SYSTEM_TIME_EXT           0x000004000
+#define GNSS_SV_MEAS_HEADER_HAS_GAL_SYSTEM_TIME_EXT           0x000008000
+#define GNSS_SV_MEAS_HEADER_HAS_BDS_SYSTEM_TIME_EXT           0x000010000
+#define GNSS_SV_MEAS_HEADER_HAS_QZSS_SYSTEM_TIME_EXT          0x000020000
+#define GNSS_SV_MEAS_HEADER_HAS_GLO_SYSTEM_TIME_EXT           0x000040000
+#define GNSS_SV_MEAS_HEADER_HAS_GPSL1L5_TIME_BIAS             0x000080000
+#define GNSS_SV_MEAS_HEADER_HAS_GALE1E5A_TIME_BIAS            0x000100000
+#define GNSS_SV_MEAS_HEADER_HAS_BDSB1IB2A_TIME_BIAS           0x000200000
+#define GNSS_SV_MEAS_HEADER_HAS_GPS_NAVIC_INTER_SYSTEM_BIAS   0x000400000
+#define GNSS_SV_MEAS_HEADER_HAS_GAL_NAVIC_INTER_SYSTEM_BIAS   0x000800000
+#define GNSS_SV_MEAS_HEADER_HAS_GLO_NAVIC_INTER_SYSTEM_BIAS   0x001000000
+#define GNSS_SV_MEAS_HEADER_HAS_BDS_NAVIC_INTER_SYSTEM_BIAS   0x002000000
+#define GNSS_SV_MEAS_HEADER_HAS_NAVIC_SYSTEM_TIME             0x004000000
+#define GNSS_SV_MEAS_HEADER_HAS_NAVIC_SYSTEM_TIME_EXT         0x008000000
+#define GNSS_SV_MEAS_HEADER_HAS_DGNSS_CORRECTION_SOURCE_TYPE  0x010000000
+#define GNSS_SV_MEAS_HEADER_HAS_DGNSS_CORRECTION_SOURCE_ID    0x020000000
+#define GNSS_SV_MEAS_HEADER_HAS_DGNSS_REF_STATION_ID          0x040000000
+#define GNSS_SV_MEAS_HEADER_HAS_REF_COUNT_TICKS               0x080000000
+#define GNSS_SV_MEAS_HEADER_HAS_GPSL1L2C_TIME_BIAS            0x100000000
+#define GNSS_SV_MEAS_HEADER_HAS_GLOG1G2_TIME_BIAS             0x200000000
+#define GNSS_SV_MEAS_HEADER_HAS_BDSB1IB1C_TIME_BIAS           0x400000000
+#define GNSS_SV_MEAS_HEADER_HAS_GALE1E5B_TIME_BIAS            0x800000000
 
 typedef struct
 {
@@ -1533,6 +1580,11 @@ typedef struct
     Gnss_InterSystemBiasStructType              bdsNavicInterSystemBias;
     Gnss_InterSystemBiasStructType              gpsL1L5TimeBias;
     Gnss_InterSystemBiasStructType              galE1E5aTimeBias;
+    Gnss_InterSystemBiasStructType              bdsB1iB2aTimeBias;
+    Gnss_InterSystemBiasStructType              gpsL1L2cTimeBias;
+    Gnss_InterSystemBiasStructType              gloG1G2TimeBias;
+    Gnss_InterSystemBiasStructType              bdsB1iB1cTimeBias;
+    Gnss_InterSystemBiasStructType              galE1E5bTimeBias;
 
     GnssSystemTimeStructType                    gpsSystemTime;
     GnssSystemTimeStructType                    galSystemTime;
@@ -2286,6 +2338,12 @@ struct OdcpiRequestInfo {
 };
 /* Callback to send ODCPI request to framework */
 typedef std::function<void(const OdcpiRequestInfo& request)> OdcpiRequestCallback;
+
+/* ODCPI callback priorities*/
+enum OdcpiPrioritytype {
+    ODCPI_HANDLER_PRIORITY_LOW,
+    ODCPI_HANDLER_PRIORITY_HIGH
+};
 
 /*
  * Callback with AGNSS(IpV4) status information.

@@ -34,6 +34,7 @@
 #include <functional>
 #include <list>
 #include <string.h>
+#include <string>
 
 #define GNSS_NI_REQUESTOR_MAX  (256)
 #define GNSS_NI_MESSAGE_ID_MAX (2048)
@@ -60,7 +61,8 @@ typedef enum {
     LOCATION_ERROR_ID_UNKNOWN,
     LOCATION_ERROR_ALREADY_STARTED,
     LOCATION_ERROR_GEOFENCES_AT_MAX,
-    LOCATION_ERROR_NOT_SUPPORTED
+    LOCATION_ERROR_NOT_SUPPORTED,
+    LOCATION_ERROR_TIMEOUT,
 } LocationError;
 
 // Flags to indicate which values are valid in a Location
@@ -76,14 +78,24 @@ typedef enum {
     LOCATION_HAS_BEARING_ACCURACY_BIT  = (1<<7), // location has valid bearing accuracy
     LOCATION_HAS_SPOOF_MASK            = (1<<8), // location has valid spoof mask
     LOCATION_HAS_ELAPSED_REAL_TIME     = (1<<9), // location has valid elapsed real time
+    LOCATION_HAS_CONFORMITY_INDEX_BIT  = (1<<10), // location has valid conformity index
 } LocationFlagsBits;
 
 typedef uint16_t LocationTechnologyMask;
+// mask indicating location calculations including...
 typedef enum {
-    LOCATION_TECHNOLOGY_GNSS_BIT     = (1<<0), // location was calculated using GNSS
-    LOCATION_TECHNOLOGY_CELL_BIT     = (1<<1), // location was calculated using Cell
-    LOCATION_TECHNOLOGY_WIFI_BIT     = (1<<2), // location was calculated using WiFi
-    LOCATION_TECHNOLOGY_SENSORS_BIT  = (1<<3), // location was calculated using Sensors
+    LOCATION_TECHNOLOGY_GNSS_BIT                     = (1<<0), // using GNSS
+    LOCATION_TECHNOLOGY_CELL_BIT                     = (1<<1), // using Cell
+    LOCATION_TECHNOLOGY_WIFI_BIT                     = (1<<2), // using WiFi
+    LOCATION_TECHNOLOGY_SENSORS_BIT                  = (1<<3), // using Sensors
+    LOCATION_TECHNOLOGY_REFERENCE_LOCATION_BIT       = (1<<4), // using reference location
+    LOCATION_TECHNOLOGY_INJECTED_COARSE_POSITION_BIT = (1<<5), // using CPI
+    LOCATION_TECHNOLOGY_AFLT_BIT                     = (1<<6), // AFLT
+    LOCATION_TECHNOLOGY_HYBRID_BIT                   = (1<<7), // HYBRID
+    LOCATION_TECHNOLOGY_PPE_BIT                      = (1<<8), // PPE
+    LOCATION_TECHNOLOGY_VEH_BIT                      = (1<<9), // using vehicular data
+    LOCATION_TECHNOLOGY_VIS_BIT                      = (1<<10), // using visual data
+    LOCATION_TECHNOLOGY_DGNSS_BIT                    = (1<<11),  // DGNSS
 } LocationTechnologyBits;
 
 typedef uint32_t LocationSpoofMask;
@@ -103,28 +115,25 @@ typedef enum {
 
 typedef uint32_t GnssLocationNavSolutionMask;
 typedef enum {
-    LOCATION_SBAS_CORRECTION_IONO_BIT  = (1<<0), // SBAS ionospheric correction is used
-    LOCATION_SBAS_CORRECTION_FAST_BIT  = (1<<1), // SBAS fast correction is used
-    LOCATION_SBAS_CORRECTION_LONG_BIT  = (1<<2), // SBAS long-tem correction is used
-    LOCATION_SBAS_INTEGRITY_BIT        = (1<<3), // SBAS integrity information is used
-    LOCATION_NAV_CORRECTION_DGNSS_BIT  = (1<<4), // Position Report is DGNSS corrected
-    LOCATION_NAV_CORRECTION_RTK_BIT    = (1<<5), // Position Report is RTK corrected
-    LOCATION_NAV_CORRECTION_PPP_BIT    = (1<<6) // Position Report is PPP corrected
+    // SBAS ionospheric correction is used
+    LOCATION_SBAS_CORRECTION_IONO_BIT  = (1<<0),
+    // SBAS fast correction is used
+    LOCATION_SBAS_CORRECTION_FAST_BIT  = (1<<1),
+    // SBAS long-tem correction is used
+    LOCATION_SBAS_CORRECTION_LONG_BIT  = (1<<2),
+    // SBAS integrity information is used
+    LOCATION_SBAS_INTEGRITY_BIT        = (1<<3),
+    // Position Report is DGNSS corrected
+    LOCATION_NAV_CORRECTION_DGNSS_BIT  = (1<<4),
+     // Position Report is RTK corrected
+    LOCATION_NAV_CORRECTION_RTK_BIT    = (1<<5),
+    // Position Report is PPP corrected
+    LOCATION_NAV_CORRECTION_PPP_BIT    = (1<<6),
+    // Posiiton Report is RTF fixed corrected
+    LOCATION_NAV_CORRECTION_RTK_FIXED_BIT  = (1<<7),
+    // Position report is computed with only SBAS corrected SVs.
+    LOCATION_NAV_CORRECTION_ONLY_SBAS_CORRECTED_SV_USED_BIT = (1<<8)
 } GnssLocationNavSolutionBits;
-
-typedef uint32_t GnssLocationPosTechMask;
-typedef enum {
-    LOCATION_POS_TECH_DEFAULT_BIT                  = 0,
-    LOCATION_POS_TECH_SATELLITE_BIT                = (1<<0),
-    LOCATION_POS_TECH_CELLID_BIT                   = (1<<1),
-    LOCATION_POS_TECH_WIFI_BIT                     = (1<<2),
-    LOCATION_POS_TECH_SENSORS_BIT                  = (1<<3),
-    LOCATION_POS_TECH_REFERENCE_LOCATION_BIT       = (1<<4),
-    LOCATION_POS_TECH_INJECTED_COARSE_POSITION_BIT = (1<<5),
-    LOCATION_POS_TECH_AFLT_BIT                     = (1<<6),
-    LOCATION_POS_TECH_HYBRID_BIT                   = (1<<7),
-    LOCATION_POS_TECH_PPE_BIT                      = (1<<8)
-} GnssLocationPosTechBits;
 
 typedef uint32_t GnssLocationPosDataMask;
 typedef enum {
@@ -165,43 +174,45 @@ typedef enum {
     LOCATION_NAV_DATA_HAS_YAW_UNC_BIT        = (1<<7)
 } GnssLocationPosDataBitsExt;
 
-typedef uint32_t GnssLocationInfoFlagMask;
+typedef uint64_t GnssLocationInfoFlagMask;
 typedef enum {
-    GNSS_LOCATION_INFO_ALTITUDE_MEAN_SEA_LEVEL_BIT      = (1<<0), // valid altitude mean sea level
-    GNSS_LOCATION_INFO_DOP_BIT                          = (1<<1), // valid pdop, hdop, and vdop
-    GNSS_LOCATION_INFO_MAGNETIC_DEVIATION_BIT           = (1<<2), // valid magnetic deviation
-    GNSS_LOCATION_INFO_HOR_RELIABILITY_BIT              = (1<<3), // valid horizontal reliability
-    GNSS_LOCATION_INFO_VER_RELIABILITY_BIT              = (1<<4), // valid vertical reliability
-    GNSS_LOCATION_INFO_HOR_ACCURACY_ELIP_SEMI_MAJOR_BIT = (1<<5), // valid elipsode semi major
-    GNSS_LOCATION_INFO_HOR_ACCURACY_ELIP_SEMI_MINOR_BIT = (1<<6), // valid elipsode semi minor
-    GNSS_LOCATION_INFO_HOR_ACCURACY_ELIP_AZIMUTH_BIT    = (1<<7), // valid accuracy elipsode azimuth
-    GNSS_LOCATION_INFO_GNSS_SV_USED_DATA_BIT            = (1<<8), // valid svUsedInPosition,
-                                                                  //       numOfMeasReceived
-                                                                  //       and measUsageInfo
-    GNSS_LOCATION_INFO_NAV_SOLUTION_MASK_BIT            = (1<<9), // valid navSolutionMask
-    GNSS_LOCATION_INFO_POS_TECH_MASK_BIT                = (1<<10),// valid LocPosTechMask
-    GNSS_LOCATION_INFO_SV_SOURCE_INFO_BIT               = (1<<11),// valid LocSvInfoSource
-    GNSS_LOCATION_INFO_POS_DYNAMICS_DATA_BIT            = (1<<12),// valid position dynamics data
-                                                                  // and Position Dynamics Ext
-    GNSS_LOCATION_INFO_EXT_DOP_BIT                      = (1<<13),// valid gdop, tdop
-    GNSS_LOCATION_INFO_NORTH_STD_DEV_BIT                = (1<<14),// valid North standard deviation
-    GNSS_LOCATION_INFO_EAST_STD_DEV_BIT                 = (1<<15),// valid East standard deviation
-    GNSS_LOCATION_INFO_NORTH_VEL_BIT                    = (1<<16),// valid North Velocity
-    GNSS_LOCATION_INFO_EAST_VEL_BIT                     = (1<<17),// valid East Velocity
-    GNSS_LOCATION_INFO_UP_VEL_BIT                       = (1<<18),// valid Up Velocity
-    GNSS_LOCATION_INFO_NORTH_VEL_UNC_BIT                = (1<<19),// valid North Velocity Uncertainty
-    GNSS_LOCATION_INFO_EAST_VEL_UNC_BIT                 = (1<<20),// valid East Velocity Uncertainty
-    GNSS_LOCATION_INFO_UP_VEL_UNC_BIT                   = (1<<21),// valid Up Velocity Uncertainty
-    GNSS_LOCATION_INFO_LEAP_SECONDS_BIT                 = (1<<22),// valid leap seconds
-    GNSS_LOCATION_INFO_TIME_UNC_BIT                     = (1<<23),// valid time uncertainty
-    GNSS_LOCATION_INFO_NUM_SV_USED_IN_POSITION_BIT      = (1<<24), // number of SV used in position
-    GNSS_LOCATION_INFO_CALIBRATION_CONFIDENCE_BIT       = (1<<25), // valid sensor cal confidence
-    GNSS_LOCATION_INFO_CALIBRATION_STATUS_BIT           = (1<<26), // valid sensor cal status
-    GNSS_LOCATION_INFO_OUTPUT_ENG_TYPE_BIT              = (1<<27), // valid output engine type
-    GNSS_LOCATION_INFO_OUTPUT_ENG_MASK_BIT              = (1<<28), // valid output engine mask
-    GNSS_LOCATION_INFO_CONFORMITY_INDEX_BIT             = (1<<29), // valid conformity index
-    GNSS_LOCATION_INFO_LLA_VRP_BASED_BIT                = (1<<30), // valid VRP-based lat/long/alt
-    GNSS_LOCATION_INFO_ENU_VELOCITY_VRP_BASED_BIT       = (1<<31), // VRP-based east/north/up vel
+    GNSS_LOCATION_INFO_ALTITUDE_MEAN_SEA_LEVEL_BIT      = (1<<0),  // altitude mean sea level
+    GNSS_LOCATION_INFO_DOP_BIT                          = (1<<1),  // pdop, hdop, and vdop
+    GNSS_LOCATION_INFO_MAGNETIC_DEVIATION_BIT           = (1<<2),  // magnetic deviation
+    GNSS_LOCATION_INFO_HOR_RELIABILITY_BIT              = (1<<3),  // horizontal reliability
+    GNSS_LOCATION_INFO_VER_RELIABILITY_BIT              = (1<<4),  // vertical reliability
+    GNSS_LOCATION_INFO_HOR_ACCURACY_ELIP_SEMI_MAJOR_BIT = (1<<5),  // elipsode semi major
+    GNSS_LOCATION_INFO_HOR_ACCURACY_ELIP_SEMI_MINOR_BIT = (1<<6),  // elipsode semi minor
+    GNSS_LOCATION_INFO_HOR_ACCURACY_ELIP_AZIMUTH_BIT    = (1<<7),  // accuracy elipsode azimuth
+    GNSS_LOCATION_INFO_GNSS_SV_USED_DATA_BIT            = (1<<8),  // svUsedInPosition,
+                                                                   //       numOfMeasReceived
+                                                                   //       and measUsageInfo
+    GNSS_LOCATION_INFO_NAV_SOLUTION_MASK_BIT            = (1<<9),  // navSolutionMask
+    GNSS_LOCATION_INFO_SV_SOURCE_INFO_BIT               = (1<<10), // LocSvInfoSource
+    GNSS_LOCATION_INFO_POS_DYNAMICS_DATA_BIT            = (1<<11), // position dynamics data &
+                                                                   //       Position Dynamics Ext
+    GNSS_LOCATION_INFO_EXT_DOP_BIT                      = (1<<12), // gdop, tdop
+    GNSS_LOCATION_INFO_NORTH_STD_DEV_BIT                = (1<<13), // North standard deviation
+    GNSS_LOCATION_INFO_EAST_STD_DEV_BIT                 = (1<<14), // East standard deviation
+    GNSS_LOCATION_INFO_NORTH_VEL_BIT                    = (1<<15), // North Velocity
+    GNSS_LOCATION_INFO_EAST_VEL_BIT                     = (1<<16), // East Velocity
+    GNSS_LOCATION_INFO_UP_VEL_BIT                       = (1<<17), // Up Velocity
+    GNSS_LOCATION_INFO_NORTH_VEL_UNC_BIT                = (1<<18), // North Velocity Uncertainty
+    GNSS_LOCATION_INFO_EAST_VEL_UNC_BIT                 = (1<<19), // East Velocity Uncertainty
+    GNSS_LOCATION_INFO_UP_VEL_UNC_BIT                   = (1<<20), // Up Velocity Uncertainty
+    GNSS_LOCATION_INFO_LEAP_SECONDS_BIT                 = (1<<21), // leap seconds
+    GNSS_LOCATION_INFO_TIME_UNC_BIT                     = (1<<22), // time uncertainty
+    GNSS_LOCATION_INFO_NUM_SV_USED_IN_POSITION_BIT      = (1<<23), // number of SV used in position
+    GNSS_LOCATION_INFO_CALIBRATION_CONFIDENCE_BIT       = (1<<24), // sensor cal confidence
+    GNSS_LOCATION_INFO_CALIBRATION_STATUS_BIT           = (1<<25), // sensor cal status
+    GNSS_LOCATION_INFO_OUTPUT_ENG_TYPE_BIT              = (1<<26), // output engine type
+    GNSS_LOCATION_INFO_OUTPUT_ENG_MASK_BIT              = (1<<27), // output engine mask
+    GNSS_LOCATION_INFO_CONFORMITY_INDEX_BIT             = (1<<28), // conformity index
+    GNSS_LOCATION_INFO_LLA_VRP_BASED_BIT                = (1<<29), // VRP-based lat/long/alt
+    GNSS_LOCATION_INFO_ENU_VELOCITY_VRP_BASED_BIT       = (1<<30), // VRP-based east/north/up vel
+    GNSS_LOCATION_INFO_DR_SOLUTION_STATUS_MASK_BIT      = (1ULL<<31), // Valid DR solution status
+    GNSS_LOCATION_INFO_ALTITUDE_ASSUMED_BIT             = (1ULL<<32), // Valid altitude assumed
+    GNSS_LOCATION_INFO_SESSION_STATUS_BIT               = (1ULL<<33), // session status
 } GnssLocationInfoFlagBits;
 
 typedef enum {
@@ -225,7 +236,8 @@ typedef enum {
     GEOFENCE_STATUS_AVAILABILE_YES,
 } GeofenceStatusAvailable;
 
-typedef uint32_t LocationCapabilitiesMask;
+// Set of masks for Modem and QWES capabilities.
+typedef uint64_t LocationCapabilitiesMask;
 typedef enum {
     // supports startTracking API with minInterval param
     LOCATION_CAPABILITIES_TIME_BASED_TRACKING_BIT           = (1<<0),
@@ -255,7 +267,89 @@ typedef enum {
     LOCATION_CAPABILITIES_PRIVACY_BIT                       = (1<<12),
     // support measurement corrections
     LOCATION_CAPABILITIES_MEASUREMENTS_CORRECTION_BIT       = (1<<13),
+    // support Robust Location
+    LOCATION_CAPABILITIES_CONFORMITY_INDEX_BIT               = (1<<14),
+    // support precise location edgnss
+    LOCATION_CAPABILITIES_EDGNSS_BIT                        = (1<<15),
+    // Modem supports Carrier Phase for Precise Positioning
+    // Measurement Engine (PPME).
+    LOCATION_CAPABILITIES_QWES_CARRIER_PHASE_BIT            = (1<<16),
+    // Modem supports SV Polynomial for tightly coupled external
+    // DR support. This is a Standalone Feature.
+    LOCATION_CAPABILITIES_QWES_SV_POLYNOMIAL_BIT            = (1<<17),
+    // Modem supports SV Ephemeris for tightly coupled external
+    // PPE engines. This is a Standalone Feature.
+    LOCATION_CAPABILITIES_QWES_SV_EPHEMERIS_BIT            = (1<<18),
+    // Modem supports GNSS Single Frequency feature. This is a
+    // Standalone Feature.
+    LOCATION_CAPABILITIES_QWES_GNSS_SINGLE_FREQUENCY        = (1<<19),
+    // Modem supports GNSS Multi Frequency feature. Multi Frequency
+    // enables Single frequency also.
+    LOCATION_CAPABILITIES_QWES_GNSS_MULTI_FREQUENCY         = (1<<20),
+    // This mask indicates VPe license bundle is enabled. VEPP
+    // bundle include Carrier Phase and SV Polynomial features.
+    LOCATION_CAPABILITIES_QWES_VPE                          = (1<<21),
+    // This mask indicates support for CV2X Location basic features.
+    // This bundle includes features for GTS Time & Freq, C-TUNC
+    // (Constrained Time uncertainity.
+    LOCATION_CAPABILITIES_QWES_CV2X_LOCATION_BASIC          = (1<<22),
+    // This mask indicates support for CV2X Location premium features.
+    // This bundle includes features for CV2X Location Basic features,
+    // QDR3 feature, and PACE. (Position Assisted Clock Estimator.
+    LOCATION_CAPABILITIES_QWES_CV2X_LOCATION_PREMIUM         = (1<<23),
+    // This mask indicates that PPE (Precise Positioning Engine)
+    // library is enabled or Precise Positioning Framework (PPF)
+    // is available. This bundle includes features for Carrier
+    // Phase and SV Ephermeris.
+    LOCATION_CAPABILITIES_QWES_PPE                          = (1<<24),
+    // This mask indicates QDR2_C license bundle is enabled. This
+    // bundle includes features for SV Polynomial.
+    LOCATION_CAPABILITIES_QWES_QDR2                         = (1<<25),
+    // This mask indicates QDR3_C license bundle is enabled. This
+    // bundle includes features for SV Polynomial.
+    LOCATION_CAPABILITIES_QWES_QDR3                         = (1<<26),
 } LocationCapabilitiesBits;
+
+typedef uint8_t LocationQwesFeatureType;
+typedef enum {
+    // Modem supports Carrier Phase for Precise Positioning
+    // Measurement Engine (PPME).
+    LOCATION_QWES_FEATURE_TYPE_CARRIER_PHASE                 = 1,
+    // Modem supports SV Polynomial for tightly coupled external
+    // DR support. This is a Standalone Feature.
+    LOCATION_QWES_FEATURE_TYPE_SV_POLYNOMIAL,
+    // Modem supports SV Ephemeris for tightly coupled external
+    // PPE support. This is a Standalone Feature.
+    LOCATION_QWES_FEATURE_TYPE_SV_EPH,
+    // Modem supports GNSS Single Frequency feature. This is a
+    // Standalone Feature.
+    LOCATION_QWES_FEATURE_TYPE_GNSS_SINGLE_FREQUENCY,
+    // Modem supports GNSS Multi Frequency feature. Multi Frequency
+    // enables Single frequency also.
+    LOCATION_QWES_FEATURE_TYPE_GNSS_MULTI_FREQUENCY,
+    // This indicates Time and Frequency status.
+    LOCATION_QWES_FEATURE_TYPE_TIME_FREQUENCY,
+    // This indicates Time Uncertainty  status.
+    LOCATION_QWES_FEATURE_TYPE_TIME_UNCERTAINTY,
+    // This indicates Clock Estimate status.
+    LOCATION_QWES_FEATURE_TYPE_CLOCK_ESTIMATE,
+    // This mask indicates that PPE (Precise Positioning Engine)
+    // library is enabled or Precise Positioning Framework (PPF)
+    // is available. This bundle includes features for Carrier
+    // Phase and SV Ephermeris.
+    LOCATION_QWES_FEATURE_TYPE_PPE,
+    // This indicates QDR2_C license bundle is enabled. This
+    // bundle includes features for SV Polynomial.
+    LOCATION_QWES_FEATURE_TYPE_QDR2,
+    // This indicates QDR3_C license bundle is enabled. This
+    // bundle includes features for SV Polynomial.
+    LOCATION_QWES_FEATURE_TYPE_QDR3,
+    // This indicates VEPP license bundle is enabled. VEPP
+    // bundle include Carrier Phase and SV Polynomial features.
+    LOCATION_QWES_FEATURE_TYPE_VPE,
+    // Max value
+    LOCATION_QWES_FEATURE_TYPE_MAX
+} LocationQwesFeatureTypes;
 
 typedef enum {
     LOCATION_TECHNOLOGY_TYPE_GNSS = 0,
@@ -279,12 +373,14 @@ typedef enum {
 } GnssConfigSuplVersion;
 
 // LTE Positioning Profile
+typedef uint16_t GnssConfigLppProfileMask;
 typedef enum {
-    GNSS_CONFIG_LPP_PROFILE_RRLP_ON_LTE = 0,              // RRLP on LTE (Default)
-    GNSS_CONFIG_LPP_PROFILE_USER_PLANE,                   // LPP User Plane (UP) on LTE
-    GNSS_CONFIG_LPP_PROFILE_CONTROL_PLANE,                // LPP_Control_Plane (CP)
-    GNSS_CONFIG_LPP_PROFILE_USER_PLANE_AND_CONTROL_PLANE, // Both LPP UP and CP
-} GnssConfigLppProfile;
+    GNSS_CONFIG_LPP_PROFILE_RRLP_ON_LTE = 0,                         // RRLP on LTE (Default)
+    GNSS_CONFIG_LPP_PROFILE_USER_PLANE_BIT                 = (1<<0), // LPP User Plane (UP) on LTE
+    GNSS_CONFIG_LPP_PROFILE_CONTROL_PLANE_BIT              = (1<<1), // LPP_Control_Plane (CP)
+    GNSS_CONFIG_LPP_PROFILE_USER_PLANE_OVER_NR5G_SA_BIT    = (1<<2), // LPP User Plane (UP) on LTE
+    GNSS_CONFIG_LPP_PROFILE_CONTROL_PLANE_OVER_NR5G_SA_BIT = (1<<3), // LPP_Control_Plane (CP)
+} GnssConfigLppProfileBits;
 
 // Technology for LPPe Control Plane
 typedef uint16_t GnssConfigLppeControlPlaneMask;
@@ -347,6 +443,8 @@ typedef enum {
     GNSS_CONFIG_FLAGS_EMERGENCY_EXTENSION_SECONDS_BIT      = (1<<11),
     GNSS_CONFIG_FLAGS_ROBUST_LOCATION_BIT                  = (1<<12),
     GNSS_CONFIG_FLAGS_MIN_GPS_WEEK_BIT                     = (1<<13),
+    GNSS_CONFIG_FLAGS_MIN_SV_ELEVATION_BIT                 = (1<<14),
+    GNSS_CONFIG_FLAGS_CONSTELLATION_SECONDARY_BAND_BIT     = (1<<15),
 } GnssConfigFlagsBits;
 
 typedef enum {
@@ -493,6 +591,7 @@ typedef enum {
     GNSS_MEASUREMENTS_DATA_FULL_ISB_UNCERTAINTY_BIT         = (1<<19),
     GNSS_MEASUREMENTS_DATA_SATELLITE_ISB_BIT                = (1<<20),
     GNSS_MEASUREMENTS_DATA_SATELLITE_ISB_UNCERTAINTY_BIT    = (1<<21),
+    GNSS_MEASUREMENTS_DATA_CYCLE_SLIP_COUNT_BIT             = (1<<22),
 } GnssMeasurementsDataFlagsBits;
 
 typedef uint32_t GnssMeasurementsStateMask;
@@ -703,10 +802,22 @@ typedef uint32_t PositioningEngineMask;
 typedef enum {
     STANDARD_POSITIONING_ENGINE = (1 << 0),
     DEAD_RECKONING_ENGINE       = (1 << 1),
-    PRECISE_POSITIONING_ENGINE  = (1 << 2)
+    PRECISE_POSITIONING_ENGINE  = (1 << 2),
+    VP_POSITIONING_ENGINE  = (1 << 3)
 } PositioningEngineBits;
 #define POSITION_ENGINE_MASK_ALL \
-        (STANDARD_POSITIONING_ENGINE|DEAD_RECKONING_ENGINE|PRECISE_POSITIONING_ENGINE)
+        (STANDARD_POSITIONING_ENGINE|DEAD_RECKONING_ENGINE| \
+        PRECISE_POSITIONING_ENGINE|VP_POSITIONING_ENGINE)
+
+/** Specify the position engine running state. <br/> */
+enum LocEngineRunState {
+    /** Request the position engine to be put into resume state.
+     *  <br/> */
+    LOC_ENGINE_RUN_STATE_PAUSE   = 1,
+    /** Request the position engine to be put into resume state.
+     *  <br/> */
+    LOC_ENGINE_RUN_STATE_RESUME   = 2,
+};
 
 typedef uint64_t GnssDataMask;
 typedef enum {
@@ -756,11 +867,17 @@ typedef struct {
     GnssAidingDataCommonMask mask; // bitwise OR of GnssAidingDataCommonBits
 } GnssAidingDataCommon;
 
+typedef uint32_t DrEngineAidingDataMask;
+typedef enum {
+    DR_ENGINE_AIDING_DATA_CALIBRATION_BIT = (1<<0), // Calibration data for DRE engine
+} DrEngineAidingDataBits;
+
 typedef struct {
     bool deleteAll;              // if true, delete all aiding data and ignore other params
     GnssAidingDataSv sv;         // SV specific aiding data
     GnssAidingDataCommon common; // common aiding data
-    PositioningEngineMask posEngineMask; // engines to perform the delete operation on.
+    DrEngineAidingDataMask dreAidingDataMask;// aiding data mask for dr engine
+    PositioningEngineMask posEngineMask;     // engines to perform the delete operation on.
 } GnssAidingData;
 
 typedef uint16_t DrCalibrationStatusMask;
@@ -790,8 +907,9 @@ typedef struct {
     float verticalAccuracy;  // in meters
     float speedAccuracy;     // in meters/second
     float bearingAccuracy;   // in degrees (0 to 359.999)
+    float conformityIndex;   // in range [0, 1]
     LocationTechnologyMask techMask;
-    LocationSpoofMask      spoofMask;
+    LocationSpoofMask spoofMask;
     uint64_t elapsedRealTime;    // in ns
     uint64_t elapsedRealTimeUnc; // in ns
 } Location;
@@ -800,6 +918,7 @@ typedef enum {
     LOC_REQ_ENGINE_FUSED_BIT = (1<<0),
     LOC_REQ_ENGINE_SPE_BIT   = (1<<1),
     LOC_REQ_ENGINE_PPE_BIT   = (1<<2),
+    LOC_REQ_ENGINE_VPE_BIT   = (1<<3)
 } LocReqEngineTypeMask;
 
 typedef enum {
@@ -808,6 +927,7 @@ typedef enum {
     LOC_OUTPUT_ENGINE_SPE     = 1,
     /** This is the GNSS fix with correction PPP/RTK correction */
     LOC_OUTPUT_ENGINE_PPE     = 2,
+    LOC_OUTPUT_ENGINE_VPE = 3,
     LOC_OUTPUT_ENGINE_COUNT,
 } LocOutputEngineType;
 
@@ -967,7 +1087,6 @@ typedef struct {
     float yawUnc;         // Uncertainty of Yaw, 68% confidence level (radian)
 } GnssLocationPositionDynamicsExt;
 
-
 typedef struct {
     /** Validity mask for below fields */
     GnssSystemTimeStructTypeFlags validityMask;
@@ -1057,11 +1176,21 @@ typedef struct {
     SystemTimeStructUnion u;
 } GnssSystemTime;
 
+typedef uint32_t DrSolutionStatusMask;
+#define VEHICLE_SENSOR_SPEED_INPUT_DETECTED (1<<0)
+#define VEHICLE_SENSOR_SPEED_INPUT_USED     (1<<1)
+
 typedef struct {
     double latitude;  // in degree
     double longitude; // in degree
     float altitude;  // altitude wrt to ellipsoid
 } LLAInfo;
+
+enum loc_sess_status {
+    LOC_SESS_SUCCESS,
+    LOC_SESS_INTERMEDIATE,
+    LOC_SESS_FAILURE
+};
 
 typedef struct {
     uint32_t size;                      // set to sizeof(GnssLocationInfo)
@@ -1090,7 +1219,6 @@ typedef struct {
     uint16_t numSvUsedInPosition;
     GnssLocationSvUsedInPosition svUsedInPosition;// Gnss sv used in position data
     GnssLocationNavSolutionMask navSolutionMask;  // Nav solution mask to indicate sbas corrections
-    GnssLocationPosTechMask posTechMask;          // Position technology used in computing this fix
     GnssLocationPositionDynamics bodyFrameData;   // Body Frame Dynamics: 4wayAcceleration and
                                                   // pitch set with validity
     GnssSystemTime gnssSystemTime;            // GNSS System Time
@@ -1104,7 +1232,7 @@ typedef struct {
     // location engine type. When the fix. when the type is set to
     // LOC_ENGINE_SRC_FUSED, the fix is the propagated/aggregated
     // reports from all engines running on the system (e.g.:
-    // DR/SPE/PPE). To check which location engine contributes to
+    // DR/SPE/PPE/VPE). To check which location engine contributes to
     // the fused output, check for locOutputEngMask.
     LocOutputEngineType locOutputEngType;
     // when loc output eng type is set to fused, this field
@@ -1120,6 +1248,11 @@ typedef struct {
     LLAInfo llaVRPBased;
     // VRR-based east, north, and up velocity
     float enuVelocityVRPBased[3];
+    DrSolutionStatusMask drSolutionStatusMask;
+    // true: altitude is assumed, false: altitude is calculated
+    bool altitudeAssumed;
+    // location session status
+    loc_sess_status sessionStatus;
 } GnssLocationInfoNotification;
 
 typedef struct {
@@ -1177,6 +1310,7 @@ typedef struct {
     float carrierFrequencyHz; // carrier frequency of the signal tracked
     GnssSignalTypeMask gnssSignalTypeMask; // Specifies GNSS signal type
     double basebandCarrierToNoiseDbHz; // baseband signal strength
+    uint16_t  gloFrequency; // GLONASS Frequency channel number
 } GnssSv;
 
 struct GnssConfigSetAssistanceServer {
@@ -1232,6 +1366,7 @@ typedef struct {
     double satelliteInterSignalBiasNs;
     double satelliteInterSignalBiasUncertaintyNs;
     int16_t gloFrequency;
+    uint8_t cycleSlipCount;
 } GnssMeasurementsData;
 
 typedef struct {
@@ -1335,7 +1470,7 @@ inline bool operator ==(GnssSvIdSource const& left, GnssSvIdSource const& right)
 }
 
 #define GNSS_SV_CONFIG_ALL_BITS_ENABLED_MASK ((uint64_t)0xFFFFFFFFFFFFFFFF)
-typedef struct {
+struct GnssSvIdConfig {
     uint32_t size; // set to sizeof(GnssSvIdConfig)
 
     // GLONASS - SV 65 maps to bit 0
@@ -1364,7 +1499,21 @@ typedef struct {
     //Navic - SV 401 maps to bit 0
 #define GNSS_SV_CONFIG_NAVIC_INITIAL_SV_ID 401
     uint64_t navicBlacklistSvMask;
-} GnssSvIdConfig;
+
+    inline bool equals(const GnssSvIdConfig& inConfig) {
+        if ((inConfig.size == size) &&
+                (inConfig.gloBlacklistSvMask == gloBlacklistSvMask) &&
+                (inConfig.bdsBlacklistSvMask == bdsBlacklistSvMask) &&
+                (inConfig.qzssBlacklistSvMask == qzssBlacklistSvMask) &&
+                (inConfig.galBlacklistSvMask == galBlacklistSvMask) &&
+                (inConfig.sbasBlacklistSvMask == sbasBlacklistSvMask) &&
+                (inConfig.navicBlacklistSvMask == navicBlacklistSvMask)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
 
 // Specify the valid mask for robust location configure
 // defined in GnssConfigRobustLocation.
@@ -1405,13 +1554,44 @@ struct GnssConfigRobustLocation {
     }
 };
 
+/* Mask indicating enabled or disabled constellations and
+   secondary frequency.*/
+typedef uint64_t GnssSvTypesMask;
+typedef enum {
+    GNSS_SV_TYPES_MASK_GLO_BIT   = (1<<0),
+    GNSS_SV_TYPES_MASK_BDS_BIT   = (1<<1),
+    GNSS_SV_TYPES_MASK_QZSS_BIT  = (1<<2),
+    GNSS_SV_TYPES_MASK_GAL_BIT   = (1<<3),
+    GNSS_SV_TYPES_MASK_NAVIC_BIT = (1<<4),
+    GNSS_SV_TYPES_MASK_GPS_BIT   = (1<<5),
+} GnssSvTypesMaskBits;
+#define GNSS_SV_TYPES_MASK_ALL \
+    (GNSS_SV_TYPES_MASK_GPS_BIT|GNSS_SV_TYPES_MASK_GLO_BIT|GNSS_SV_TYPES_MASK_BDS_BIT|\
+     GNSS_SV_TYPES_MASK_QZSS_BIT|GNSS_SV_TYPES_MASK_GAL_BIT|GNSS_SV_TYPES_MASK_NAVIC_BIT)
+
+/* This SV Type config is injected directly to GNSS Adapter
+ * bypassing Location API */
+struct GnssSvTypeConfig{
+    uint32_t size; // set to sizeof(GnssSvTypeConfig)
+    // Enabled Constellations
+    GnssSvTypesMask enabledSvTypesMask;
+    // Disabled Constellations
+    GnssSvTypesMask blacklistedSvTypesMask;
+
+    inline bool equals (const GnssSvTypeConfig& inConfig) const {
+        return ((inConfig.size == size) &&
+                (inConfig.enabledSvTypesMask == enabledSvTypesMask) &&
+                (inConfig.blacklistedSvTypesMask == blacklistedSvTypesMask));
+    }
+};
+
 struct GnssConfig{
     uint32_t size;  // set to sizeof(GnssConfig)
     GnssConfigFlagsMask flags; // bitwise OR of GnssConfigFlagsBits to mark which params are valid
     GnssConfigGpsLock gpsLock;
     GnssConfigSuplVersion suplVersion;
     GnssConfigSetAssistanceServer assistanceServer;
-    GnssConfigLppProfile lppProfile;
+    GnssConfigLppProfileMask lppProfileMask;
     GnssConfigLppeControlPlaneMask lppeControlPlaneMask;
     GnssConfigLppeUserPlaneMask lppeUserPlaneMask;
     GnssConfigAGlonassPositionProtocolMask aGlonassPositionProtocolMask;
@@ -1422,13 +1602,15 @@ struct GnssConfig{
     uint32_t emergencyExtensionSeconds;
     GnssConfigRobustLocation robustLocationConfig;
     uint16_t minGpsWeek;
+    uint8_t minSvElevation;
+    GnssSvTypeConfig secondaryBandConfig;
 
     inline bool equals(const GnssConfig& config) {
         if (flags == config.flags &&
                 gpsLock == config.gpsLock &&
                 suplVersion == config.suplVersion &&
                 assistanceServer.equals(config.assistanceServer) &&
-                lppProfile == config.lppProfile &&
+                lppProfileMask == config.lppProfileMask &&
                 lppeControlPlaneMask == config.lppeControlPlaneMask &&
                 lppeUserPlaneMask == config.lppeUserPlaneMask &&
                 aGlonassPositionProtocolMask == config.aGlonassPositionProtocolMask &&
@@ -1438,7 +1620,9 @@ struct GnssConfig{
                 blacklistedSvIds == config.blacklistedSvIds &&
                 emergencyExtensionSeconds == config.emergencyExtensionSeconds &&
                 robustLocationConfig.equals(config.robustLocationConfig) &&
-                minGpsWeek == config.minGpsWeek) {
+                minGpsWeek == config.minGpsWeek &&
+                minSvElevation == config.minSvElevation &&
+                secondaryBandConfig.equals(config.secondaryBandConfig)) {
             return true;
         }
         return false;
@@ -1538,25 +1722,10 @@ struct LocationSystemInfo {
     LeapSecondSystemInfo   leapSecondSysInfo;
 };
 
-/* Mask indicating enabled or disabled constellations */
-typedef uint64_t GnssSvTypesMask;
-typedef enum {
-    GNSS_SV_TYPES_MASK_GLO_BIT  = (1<<0),
-    GNSS_SV_TYPES_MASK_BDS_BIT  = (1<<1),
-    GNSS_SV_TYPES_MASK_QZSS_BIT = (1<<2),
-    GNSS_SV_TYPES_MASK_GAL_BIT  = (1<<3),
-    GNSS_SV_TYPES_MASK_NAVIC_BIT = (1<<4),
-} GnssSvTypesMaskBits;
-
-/* This SV Type config is injected directly to GNSS Adapter
- * bypassing Location API */
-typedef struct {
-    uint32_t size; // set to sizeof(GnssSvTypeConfig)
-    // Enabled Constellations
-    GnssSvTypesMask enabledSvTypesMask;
-    // Disabled Constellations
-    GnssSvTypesMask blacklistedSvTypesMask;
-} GnssSvTypeConfig;
+// Specify the set of terrestrial technologies
+enum TerrestrialTechMask {
+    TERRESTRIAL_TECH_GTP_WWAN = 1 << 0,
+};
 
 // Specify parameters related to lever arm
 struct LeverArmParams {
@@ -1618,6 +1787,81 @@ struct BodyToSensorMountParams {
     // Single uncertainty number that may be the largest of the
     // roll, pitch and yaw offset uncertainties.
     float offsetUnc;
+};
+
+typedef uint64_t DeadReckoningEngineConfigValidMask;
+// Specify the valid mask for the configuration paramters of
+// dead reckoning position engine.
+enum DeadReckoningEngineConfigValidBit {
+    // DeadReckoningEngineConfig has valid
+    // DeadReckoningEngineConfig::DeadReckoningEngineConfig.
+    BODY_TO_SENSOR_MOUNT_PARAMS_BIT    = (1<<0),
+    // DeadReckoningEngineConfig has valid
+    //  DeadReckoningEngineConfig::vehicleSpeedScaleFactor.
+    VEHICLE_SPEED_SCALE_FACTOR_BIT     = (1<<1),
+    // DeadReckoningEngineConfig has valid
+    //  DeadReckoningEngineConfig::vehicleSpeedScaleFactorUnc.
+    VEHICLE_SPEED_SCALE_FACTOR_UNC_BIT = (1<<2),
+    // DeadReckoningEngineConfig has valid
+    //  DeadReckoningEngineConfig::gyroScaleFactor.
+    GYRO_SCALE_FACTOR_BIT              = (1<<3),
+    // DeadReckoningEngineConfig has valid
+    // DeadReckoningEngineConfig::gyroScaleFactorUnc.
+    GYRO_SCALE_FACTOR_UNC_BIT          = (1<<4),
+};
+
+// Specify the configuration parameters for the dead reckoning
+//  position engine
+struct DeadReckoningEngineConfig{
+    // Specify the valid fields in the config.
+    DeadReckoningEngineConfigValidMask validMask;
+    // Body to sensor mount parameters for use by dead reckoning
+    //  positioning engine
+    BodyToSensorMountParams bodyToSensorMountParams;
+
+    // Vehicle Speed Scale Factor configuration input for the dead
+    // reckoning positioning engine. The multiplicative scale
+    // factor is applied to received Vehicle Speed value (in m/s)
+    // to obtain the true Vehicle Speed.
+    //
+    // Range is [0.9 to 1.1].
+    //
+    // Note: The scale factor is specific to a given vehicle
+    // make & model.
+    float vehicleSpeedScaleFactor;
+    // Vehicle Speed Scale Factor Uncertainty (68% confidence)
+    // configuration input for the dead reckoning positioning
+    // engine.
+    //
+    // Range is [0.0 to 0.1].
+    //
+    // Note: The scale factor unc is specific to a given vehicle
+    // make & model.
+    float vehicleSpeedScaleFactorUnc;
+
+    // Gyroscope Scale Factor configuration input for the dead
+    // reckoning positioning engine. The multiplicative scale
+    // factor is applied to received gyroscope value to obtain the
+    // true value.
+    //
+    // Range is [0.9 to 1.1].
+    //
+    // Note: The scale factor is specific to the Gyroscope sensor
+    // and typically derived from either sensor data-sheet or
+    // from actual calibration.
+    float gyroScaleFactor;
+
+    // Gyroscope Scale Factor uncertainty (68% confidence)
+    // configuration input for the dead reckoning positioning
+    // engine.
+    //
+    // Range is [0.0 to 0.1].
+    // engine.
+    //
+    // Note: The scale factor unc is specific to the make & model
+    // of Gyroscope sensor and typically derived from either
+    // sensor data-sheet or from actual calibration.
+    float gyroScaleFactorUnc;
 };
 
 /* Provides the capabilities of the system
@@ -1793,4 +2037,34 @@ typedef struct {
     std::vector<std::vector<double>> signalGainCorrectionDbi;
     std::vector<std::vector<double>> signalGainCorrectionUncertaintyDbi;
 } GnssAntennaInformation;
+
+typedef struct {
+    uint32_t size;                        // set to sizeof
+    bool requiresNmeaLocation;
+    std::string hostNameOrIp;    // null terminated string
+    std::string mountPoint;      // null terminated string
+    std::string username;        // null terminated string
+    std::string password;        // null terminated string
+    uint32_t port;
+    bool useSSL;
+} GnssNtripConnectionParams;
+
+typedef struct {
+    uint64_t meQtimer1;
+    uint64_t meQtimer2;
+    uint64_t meQtimer3;
+    uint64_t peQtimer1;
+    uint64_t peQtimer2;
+    uint64_t peQtimer3;
+    uint64_t smQtimer1;
+    uint64_t smQtimer2;
+    uint64_t smQtimer3;
+    uint64_t locMwQtimer;
+    uint64_t hlosQtimer1;
+    uint64_t hlosQtimer2;
+    uint64_t hlosQtimer3;
+    uint64_t hlosQtimer4;
+    uint64_t hlosQtimer5;
+} GnssLatencyInfo;
+
 #endif /* LOCATIONDATATYPES_H */
